@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { directus, readMe } from '../services/directus';
 import { ref, computed } from 'vue';
+import { useRouter } from 'vue-router';
 
 interface User {
   id: string;
@@ -8,6 +9,7 @@ interface User {
   first_name?: string;
   last_name?: string;
   role?: string;
+  avatar?: string;
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -15,17 +17,18 @@ export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(localStorage.getItem('directus_token'));
   const loading = ref(false);
   const error = ref<string | null>(null);
+  const router = useRouter();
 
-  // ✅ Computed property to check authentication status
+
   const isAuthenticated = computed(() => !!token.value);
 
-  // ✅ Login 
+  // Login 
   async function login(credentials: { email: string; password: string }): Promise<boolean> {
     loading.value = true;
     error.value = null;
 
     try {
-      const response = await directus.login(credentials.email, credentials.password, { mode: 'json' });
+      const response = await directus.login(credentials.email, credentials.password);
 
       if (response?.access_token) {
         token.value = response.access_token;
@@ -44,21 +47,15 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // ✅ Fetch authenticated user
+  // Fetch user
   async function fetchCurrentUser() {
     if (!token.value) return;
 
     try {
-      const me = await directus.request(readMe()); // ✅ Correct API call
+      const me = await directus.request(readMe());
 
       if (me && typeof me === 'object' && 'email' in me) {
-        user.value = {
-          id: me.id,
-          email: me.email,
-          first_name: me.first_name || '',
-          last_name: me.last_name || '',
-          role: me.role || '',
-        };
+        user.value = me as User;
       } else {
         throw new Error('Invalid user data received');
       }
@@ -68,30 +65,36 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // ✅ Logout
+  // Logout
   async function logout() {
     try {
       await directus.logout();
-    } catch (err) {
-      console.error('Logout error:', err);
-    } finally {
       user.value = null;
       token.value = null;
       localStorage.removeItem('directus_token');
-    }
+      return true;
+    } catch (err) {
+      console.error('Logout error:', err);
+      return false;
+    } finally {
+      localStorage.removeItem('directus_token');
+      void router.push('/login');
+    };
   }
 
-  // ✅ Auto-load user session on startup
-  async function init() {
+  // Auto-load user session on startup
+  async function init(): Promise<void> {
     if (token.value) {
       try {
         await fetchCurrentUser();
+        console.log("refetched");
       } catch (err) {
         console.log('Session not found or invalid:', err);
         await logout();
       }
     }
   }
+
 
   return {
     user,

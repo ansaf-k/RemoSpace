@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from 'src/stores/authStore';
 import { useQuasar } from 'quasar';
@@ -13,9 +13,7 @@ const loginError = ref('');
 const authStore = useAuthStore();
 const $q = useQuasar();
 
-
 const onSubmit = async () => {
-
 
     try {
         await authStore.login({
@@ -23,22 +21,30 @@ const onSubmit = async () => {
             password: password.value,
         });
 
+        void router.push('/dashboard');
         $q.notify({
-            type: 'positive',
-            message: 'Login successful!',
+            type: authStore.error ? 'negative' : 'positive',
+            message: authStore.error ? `${authStore.error}` : 'Login successful!',
             timeout: 1000,
         });
 
-        void router.push('/dashboard');
-        console.log("oksss");
     } catch (error) {
-        console.error('Login error:', error);
+        console.log('Login error:', error);
         $q.notify({
             type: 'negative',
             message: 'Login failed. Please try again.'
         });
     }
 }
+
+onMounted(() => {
+    if(authStore.token) {
+        void router.push('/dashboard');
+        console.log("token exists");
+    }else{
+        console.log("token does not exist");
+    }
+});
 
 </script>
 

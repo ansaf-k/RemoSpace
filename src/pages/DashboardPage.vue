@@ -1,67 +1,30 @@
 <script setup lang="ts">
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useAuthStore } from 'src/stores/authStore';
 import { useCheckInStore } from 'src/stores/checkInStore';
-import { onMounted, ref, onBeforeUnmount } from 'vue';
-import { useRouter } from 'vue-router';
+import { useQuasar } from 'quasar';
 
-const loadingData = ref(true);
-const currentDate = ref('');
-const currentDateTime = ref(new Date());
-const router = useRouter();
 const authStore = useAuthStore();
-const showModal = ref(true);
-const locationVerified = ref(true);
 const checkInStore = useCheckInStore();
 
-console.log("asdf",checkInStore?.check)
+const $q = useQuasar();
+const loadingData = ref(true);
+const currentDateTime = ref(new Date());
+const showModal = ref(true);
+const timeInterval = ref<number | null>(null);
 
-let timeInterval: number | null = null;
-
-const onSubmit = (): void => {
-
-    showModal.value = false;
-};
-
+// User state
 const user = ref({
-    first_name: 'John Doe',
+    first_name: '',
     position: 'UX Designer',
     avatar: 'https://cdn.quasar.dev/img/avatar.png',
-    status: 'checked-in',
-    checkedInTime: '08:30 AM',
-    mood: 'happy'
+    status: '',
+    checkedInTime: '',
+    checkedOutTime: '',
+    mood: ''
 });
 
-
-const updateCurrentTime = (): void => {
-    const now = new Date();
-    currentDate.value = now.toLocaleDateString([], {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric'
-    });
-};
-
-
-// check-in modal
-const handleCheckIn = () => {
-
-};
-
-
-const handleMood = () => {
-    if (user.value.mood == '') {
-        // $q.notify({
-        //     message: 'You already checked-in',
-        //     color: 'secondary',
-        //     position: 'top'
-        // })
-        void router.push('/mood');
-        return;
-    } else {
-        console.log("ok");
-    }
-};
-
+// Active teams data
 const activeTeams = ref([
     {
         id: 1,
@@ -75,8 +38,7 @@ const activeTeams = ref([
     },
 ]);
 
-
-// Team members data
+// Active team members
 const activeMembers = ref([
     { name: 'Sarah Miller', status: 'checked-in', avatar: 'https://cdn.quasar.dev/img/avatar5.jpg', time: '08:32 AM' },
     { name: 'David Chen', status: 'checked-in', avatar: 'https://cdn.quasar.dev/img/avatar3.jpg', time: '07:45 AM' },
@@ -84,64 +46,59 @@ const activeMembers = ref([
     { name: 'James Wilson', status: 'checked-in', avatar: 'https://cdn.quasar.dev/img/avatar2.jpg', time: '09:05 AM' }
 ]);
 
-
-const checkLocation = (): void => {
-    // Implement actual location checking logic here
-    locationVerified.value = true;
+// check-in
+const handleCheckIn = async (): Promise<void> => {
+    console.log("in");
+    try {
+        if (authStore.user && authStore.user.id) {
+            await checkInStore.checkIn(authStore.user.id, 'checkin');
+        } else {
+            $q.notify('User is not logged in or ID is missing');
+        }
+        showModal.value = false;
+    } catch (err) {
+        $q.notify(err instanceof Error ? err.message : 'Check-in failed');
+        console.error('Check-in failed:', err);
+    }
 };
 
 
-// Update date time periodically
-onMounted(() => {
-
-    // Set initial time
-    updateDateTime();
-
-    // Update time every minute
-    setInterval(updateDateTime, 60000);
-
-    // Simulate navigation to check-in page
-    setTimeout(() => {
-        handleCheckIn();
-    }, 1000);
-
-    setTimeout(() => {
-        handleMood();
-    }, 1000);
-
-    // Simulating data loading
-    setTimeout(() => {
-        loadingData.value = false;
-    }, 1000);
-});
-
-onMounted(() => {
-    updateCurrentTime();
-    timeInterval = window.setInterval(updateCurrentTime, 60000);
-    checkLocation();
-});
-
-onBeforeUnmount(() => {
-    if (timeInterval !== null) {
-        clearInterval(timeInterval);
+// check-out
+const handleCheckOut = async (): Promise<void> => {
+    console.log("out");
+    try {
+        if (authStore.user && authStore.user.id) {
+            await checkInStore.checkOut(authStore.user.id, 'checkout').then(() => {
+                $q.notify('Check-out successful');
+            });
+        } else {
+            $q.notify('User is not logged in or ID is missing');
+        }
+        showModal.value = false;
+    } catch (err) {
+        $q.notify(err instanceof Error ? err.message : 'Check-in failed');
+        console.error('Check-in failed:', err);
     }
-});
+};
 
-const updateDateTime = () => {
+
+/** Updates the current date and time */
+const updateCurrentTime = (): void => {
     currentDateTime.value = new Date();
 };
 
-// Format time as hh:mm AM/PM
-const formatTime = (date: Date) => {
+/** Formats time as hh:mm AM/PM */
+const formatTime = (date: Date): string => {
     return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 };
 
-// Format date as Day of Week, Month Day
-const formatDate = (date: Date) => {
+/** Formats date as Day of Week, Month Day */
+const formatDate = (date: Date): string => {
     return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 };
 
-onMounted(() => {
+/** Fetches the authenticated user data */
+const fetchUserData = () => {
     const currentUser = authStore.user as {
         id: string;
         email: string;
@@ -152,19 +109,55 @@ onMounted(() => {
 
     if (currentUser) {
         user.value = {
-            first_name: currentUser.first_name || '',
+            first_name: currentUser.first_name || 'John Doe',
             position: 'UX Designer',
-            avatar: 'https://cdn.quasar.dev/img/avatar.png',
-            status: 'checked-in',
-            checkedInTime: '08:30 AM',
+            avatar: currentUser.avatar || 'https://cdn.quasar.dev/img/avatar.png',
+            status: checkInStore.IsCheckedIn ? 'CheckedIn' : 'CheckedOut',
+            checkedInTime: checkInStore.checkInTime || '',
+            checkedOutTime: checkInStore.checkOutTime || '',
             mood: 'happy'
         };
     } else {
         console.error('User not found');
     }
+    console.log(user.value);
+};
+
+
+onMounted(() => {
+    // Set initial time and start periodic updates
+    updateCurrentTime();
+    timeInterval.value = window.setInterval(updateCurrentTime, 60000);
+
+    // Simulating data loading
+    setTimeout(() => {
+        loadingData.value = false;
+    }, 1000);
+
+
+    // Fetch authenticated user data
+    fetchUserData();
 });
 
+// Cleanup on unmount
+onBeforeUnmount(() => {
+    if (timeInterval.value !== null) {
+        clearInterval(timeInterval.value);
+    }
+});
+
+
+watch(
+    () => [checkInStore.IsCheckedIn, checkInStore.checkInTime, checkInStore.checkOutTime],
+    () => {
+        fetchUserData();
+    },
+    { deep: true, immediate: true }
+);
+
+
 </script>
+
 
 
 <template>
@@ -249,7 +242,7 @@ onMounted(() => {
                             <div class="col-auto">
                                 <q-avatar size="48px">
                                     <img :src="user.avatar" />
-                                    <q-badge floating rounded color="green" v-if="user.status === 'checked-in'" />
+                                    <q-badge floating rounded color="green" v-if="user.status === 'CheckedIn'" />
                                 </q-avatar>
                             </div>
                             <div class="col q-ml-md">
@@ -257,8 +250,13 @@ onMounted(() => {
                                 <div class="text-caption text-grey-7">{{ user.position }}
                                 </div>
                                 <div class="text-caption q-mt-xs">
-                                    <q-badge color="green" v-if="user.status === 'checked-in'">
+                                    <q-badge color="green" v-if="user.status === 'CheckedIn'">
                                         Checked in at {{ user.checkedInTime }}
+                                    </q-badge>
+                                    <q-badge color="red" v-else-if="user.status === 'CheckedOut'">
+                                        Checked out at {{ user.checkedOutTime }}
+                                    </q-badge>
+                                    <q-badge color="orange" v-else>
                                     </q-badge>
                                 </div>
                             </div>
@@ -321,13 +319,13 @@ onMounted(() => {
 
             <q-card-section class="q-pt-lg">
                 <div class="text-center q-mb-md">
-                    <h5 class="q-my-sm">{{ user.status ? 'Start Your Day' : 'End Your Day' }}</h5>
+                    <h5 class="q-my-sm">{{ user.status == 'CheckedIn' ? 'Start Your Day' : 'End Your Day' }}</h5>
                     <p class="text-grey-7 q-mb-lg">Track your attendance and work time</p>
                 </div>
 
                 <div class="time-display text-center q-mb-lg">
                     <div class="text-h4 text-primary">{{ formatTime(currentDateTime) }}</div>
-                    <div class="text-caption text-grey">{{ currentDate }}</div>
+                    <div class="text-caption text-grey">{{ formatDate(currentDateTime) }}</div>
                 </div>
 
                 <div class="q-mb-lg">
@@ -345,8 +343,8 @@ onMounted(() => {
 
             <q-card-actions align="right">
                 <q-btn flat color="grey-7" label="Cancel" v-close-popup />
-                <q-btn unelevated color="primary" :label="user.status ? 'Check-In' : 'Check-Out'"
-                    :disable="!locationVerified" @click="onSubmit" />
+                <q-btn unelevated color="primary" :label="user.status == 'CheckedIn' ? 'Check-Out' : 'Check-In'"
+                    @click="checkInStore.IsCheckedIn ? handleCheckOut() : handleCheckIn()" />
             </q-card-actions>
         </q-card>
     </q-dialog>
